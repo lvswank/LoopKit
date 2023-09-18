@@ -47,7 +47,7 @@ public final class MockPumpManager: TestingPumpManager {
         return MockPumpManager.managerIdentifier
     }
     
-    public static let localizedTitle = "Insulin Pump Simulator"
+    public static let localizedTitle = "Pump Simulator"
     
     public var localizedTitle: String {
         return MockPumpManager.localizedTitle
@@ -416,6 +416,10 @@ public final class MockPumpManager: TestingPumpManager {
 
     public func enactTempBasal(unitsPerHour: Double, for duration: TimeInterval, completion: @escaping (PumpManagerError?) -> Void) {
         logDeviceComms(.send, message: "Temp Basal \(unitsPerHour) U/hr Duration:\(duration.hours)")
+
+        if state.tempBasalShouldCrash {
+            fatalError("Crashing intentionally on temp basal")
+        }
         
         if state.tempBasalEnactmentShouldError || state.pumpBatteryChargeRemaining == 0 {
             let error = PumpManagerError.communication(MockPumpManagerError.communicationFailure)
@@ -469,6 +473,10 @@ public final class MockPumpManager: TestingPumpManager {
     public func enactBolus(units: Double, activationType: BolusActivationType, completion: @escaping (PumpManagerError?) -> Void) {
 
         logDeviceCommunication("enactBolus(\(units), \(activationType))")
+
+        if state.bolusShouldCrash {
+            fatalError("Crashing intentionally on bolus")
+        }
 
         if state.bolusEnactmentShouldError || state.pumpBatteryChargeRemaining == 0 {
             let error = PumpManagerError.communication(MockPumpManagerError.communicationFailure)
@@ -558,7 +566,7 @@ public final class MockPumpManager: TestingPumpManager {
 
 
             let suspendDate = Date()
-            let suspend = UnfinalizedDose(suspendStartTime: suspendDate)
+            let suspend = UnfinalizedDose(suspendStartTime: suspendDate, automatic: false)
             self.state.finalizedDoses.append(suspend)
             self.state.suspendState = .suspended(suspendDate)
             logDeviceComms(.receive, message: "Suspend accepted")
@@ -579,7 +587,7 @@ public final class MockPumpManager: TestingPumpManager {
             completion(error)
         } else {
             let resumeDate = Date()
-            let resume = UnfinalizedDose(resumeStartTime: resumeDate, insulinType: state.insulinType)
+            let resume = UnfinalizedDose(resumeStartTime: resumeDate, insulinType: state.insulinType, automatic: false)
             self.state.finalizedDoses.append(resume)
             self.state.suspendState = .resumed(resumeDate)
             storePumpEvents { (error) in
@@ -588,10 +596,14 @@ public final class MockPumpManager: TestingPumpManager {
             logDeviceCommunication("resumeDelivery succeeded", type: .receive)
         }
     }
+    
+    public func trigger(action: DeviceAction) {}
 
     public func injectPumpEvents(_ pumpEvents: [NewPumpEvent]) {
-        state.finalizedDoses += pumpEvents.compactMap { $0.unfinalizedDose }
-        state.additionalPumpEvents += pumpEvents.filter { $0.dose == nil }
+        // directly report these pump events
+        delegate.notify { delegate in
+            delegate?.pumpManager(self, hasNewPumpEvents: pumpEvents, lastReconciliation: Date()) { _ in }
+        }
     }
     
     public func setMaximumTempBasalRate(_ rate: Double) { }
@@ -608,6 +620,13 @@ public final class MockPumpManager: TestingPumpManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
             completion(.success(deliveryLimits))
         }
+    }
+}
+
+extension MockPumpManager {
+    public func acceptDefaultsAndSkipOnboarding() {
+        // TODO: Unimplemented as it's not needed for HF. Ticket to complete below.
+        // https://tidepool.atlassian.net/browse/LOOP-4599
     }
 }
 

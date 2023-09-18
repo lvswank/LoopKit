@@ -67,11 +67,16 @@ public protocol PumpManagerDelegate: DeviceManagerDelegate, PumpManagerStatusObs
     func pumpManager(_ pumpManager: PumpManager, didAdjustPumpClockBy adjustment: TimeInterval)
 
     func pumpManagerDidUpdateState(_ pumpManager: PumpManager)
+    
+    func pumpManager(_ pumpManager: PumpManager, didRequestBasalRateScheduleChange basalRateSchedule: BasalRateSchedule, completion: @escaping (Error?) -> Void)
 
     func startDateToFilterNewPumpEvents(for manager: PumpManager) -> Date
 
     /// Indicates the system time offset from a trusted time source. If the return value is added to the system time, the result is the trusted time source value. If the trusted time source is earlier than the system time, the return value is negative.
     var detectedSystemTimeOffset: TimeInterval { get }
+
+    /// Indicates if automatic dosing has been enabled
+    var automaticDosingEnabled: Bool { get }
 }
 
 
@@ -228,6 +233,13 @@ public protocol PumpManager: DeviceManager {
     ///   - completion: A closure called after the command is complete
     ///   - result: The delivery limits set or an error describing why the command failed
     func syncDeliveryLimits(limits deliveryLimits: DeliveryLimits, completion: @escaping (_ result: Result<DeliveryLimits, Error>) -> Void)
+    
+    ///
+    /// Warn the pump manager that it will be deactivated
+    ///
+    /// - Parameters:
+    ///   - completion: A closure called after preparations are complete
+    func prepareForDeactivation(_ completion: @escaping (Error?) -> Void)
 }
 
 
@@ -238,6 +250,10 @@ public extension PumpManager {
 
     func roundToSupportedBolusVolume(units: Double) -> Double {
         return supportedBolusVolumes.filter({$0 <= units}).max() ?? 0
+    }
+    
+    func prepareForDeactivation(_ completion: @escaping (Error?) -> Void) {
+        notifyDelegateOfDeactivation() { completion(nil) }
     }
 
     /// Convenience wrapper for notifying the delegate of deactivation on the delegate queue
